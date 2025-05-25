@@ -1,0 +1,13 @@
+# api_gateway_service/requirements.txt
+fastapi==0.104.1
+uvicorn[standard]==0.23.2
+pydantic==2.5.2
+pydantic-settings==2.0.3
+
+loguru==0.7.2
+asyncpg==0.27.0
+httpx>=0.25.0
+cachetools==5.3.2
+# python-dotenv is not strictly needed if pydantic-settings handles .env loading directly
+# but can be kept for consistency if other services use it for local non-Docker runs.
+python-dotenv==1.0.0 
