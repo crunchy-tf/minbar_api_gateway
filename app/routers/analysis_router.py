@@ -1,8 +1,10 @@
+# api_gateway_service/app/routers/analysis_router.py
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from typing import Any, Optional, List, Union, Dict
+from typing import Any, Optional, List, Union, Dict 
 from datetime import datetime
 from loguru import logger
 import json
+import asyncpg # <<< --- ADDED IMPORT --- <<<
 
 from app.security import get_current_username
 from app.db_connector import fetch_data
@@ -10,7 +12,7 @@ from app.config import settings
 from app.models import (
     ZScoreResultAPI, MovingAverageResultAPI, STLDecompositionAPI, BasicStatsAPI,
     TimeSeriesPoint, ZScorePointAPI, MovingAveragePointAPI, STLComponentAPI,
-    TimeSeriesRequestParams
+    TimeSeriesRequestParams # Assuming this is used or will be used by some endpoint here
 )
 from app.cache_manager import async_cache_decorator
 
@@ -31,51 +33,88 @@ ANALYSIS_TYPES_DB_MAP = {
 
 # --- Parsers for specific analysis types ---
 def _parse_zscore_result(db_record: asyncpg.Record) -> Optional[ZScoreResultAPI]:
-    data = db_record['result_structured_jsonb']
-    metadata = db_record['metadata']
+    data = db_record.get('result_structured_jsonb') # Use .get() for safety
+    metadata = db_record.get('metadata')
+    if isinstance(data, str): # If it's a JSON string from DB, parse it
+        try: data = json.loads(data)
+        except json.JSONDecodeError: logger.warning("Failed to parse ZScore JSONB"); return None
+    
     if isinstance(data, dict) and "points" in data:
         return ZScoreResultAPI(
             points=[ZScorePointAPI(**p) for p in data.get("points", [])],
             window=data.get("window"),
-            metadata=metadata
+            metadata=json.loads(metadata) if isinstance(metadata, str) else metadata
         )
     return None
 
 def _parse_ma_result(db_record: asyncpg.Record) -> Optional[MovingAverageResultAPI]:
-    data = db_record['result_series_jsonb'] 
-    params = db_record['parameters']
-    metadata = db_record['metadata']
+    data = db_record.get('result_series_jsonb') 
+    params = db_record.get('parameters')
+    metadata = db_record.get('metadata')
+
+    if isinstance(data, str): 
+        try: data = json.loads(data)
+        except json.JSONDecodeError: logger.warning("Failed to parse MA data JSONB"); return None
+    if isinstance(params, str):
+        try: params = json.loads(params)
+        except json.JSONDecodeError: logger.warning("Failed to parse MA params JSONB"); params = {} # Default if params fail
+
     if isinstance(data, dict) and "points" in data and isinstance(params, dict):
         return MovingAverageResultAPI(
             points=[MovingAveragePointAPI(**p) for p in data.get("points", [])],
             window=params.get("window", settings.DEFAULT_MOVING_AVERAGE_WINDOW),
             type=params.get("type", "simple"),
-            metadata=metadata
+            metadata=json.loads(metadata) if isinstance(metadata, str) else metadata
         )
     return None
 
 def _parse_stl_result(db_record: asyncpg.Record) -> Optional[STLDecompositionAPI]:
-    data = db_record['result_structured_jsonb']
-    metadata = db_record['metadata']
+    data = db_record.get('result_structured_jsonb')
+    metadata = db_record.get('metadata')
+    if isinstance(data, str):
+        try: data = json.loads(data)
+        except json.JSONDecodeError: logger.warning("Failed to parse STL JSONB"); return None
+
     if isinstance(data, dict) and all(k in data for k in ["trend", "seasonal", "residual", "original_timestamps"]):
+        # Ensure original_timestamps are converted back to datetime if stored as strings
+        original_timestamps_parsed = []
+        if isinstance(data.get('original_timestamps'), list):
+            for ts_str in data['original_timestamps']:
+                try:
+                    original_timestamps_parsed.append(datetime.fromisoformat(ts_str.replace("Z", "+00:00")))
+                except (ValueError, AttributeError): # Handle if not string or invalid format
+                    logger.warning(f"Could not parse timestamp '{ts_str}' in STL data.")
+                    original_timestamps_parsed.append(None) # Or handle error differently
+        
+        # Handle cases where timestamps couldn't be parsed or are fewer than other components
+        min_len = min(len(original_timestamps_parsed), len(data['trend']), len(data['seasonal']), len(data['residual']))
+
         return STLDecompositionAPI(
-            trend=[STLComponentAPI(timestamp=ts, value=val) for ts, val in zip(data['original_timestamps'], data['trend'])],
-            seasonal=[STLComponentAPI(timestamp=ts, value=val) for ts, val in zip(data['original_timestamps'], data['seasonal'])],
-            residual=[STLComponentAPI(timestamp=ts, value=val) for ts, val in zip(data['original_timestamps'], data['residual'])],
+            trend=[STLComponentAPI(timestamp=original_timestamps_parsed[i], value=data['trend'][i]) for i in range(min_len) if original_timestamps_parsed[i]],
+            seasonal=[STLComponentAPI(timestamp=original_timestamps_parsed[i], value=data['seasonal'][i]) for i in range(min_len) if original_timestamps_parsed[i]],
+            residual=[STLComponentAPI(timestamp=original_timestamps_parsed[i], value=data['residual'][i]) for i in range(min_len) if original_timestamps_parsed[i]],
             period_used=data.get("period_used"),
-            metadata=metadata
+            metadata=json.loads(metadata) if isinstance(metadata, str) else metadata
         )
     return None
 
 def _parse_basic_stats_result(db_record: asyncpg.Record) -> Optional[BasicStatsAPI]:
-    data = db_record['result_structured_jsonb']
-    metadata = db_record['metadata']
-    if isinstance(data, dict) and all(k in data for k in ["count", "mean", "median"]): # Check a few key fields
-        return BasicStatsAPI(**data, metadata=metadata)
+    data = db_record.get('result_structured_jsonb')
+    metadata = db_record.get('metadata')
+    if isinstance(data, str):
+        try: data = json.loads(data)
+        except json.JSONDecodeError: logger.warning("Failed to parse BasicStats JSONB"); return None
+        
+    if isinstance(data, dict) and all(k in data for k in ["count", "mean", "median"]):
+        return BasicStatsAPI(**data, metadata=json.loads(metadata) if isinstance(metadata, str) else metadata)
     return None
 
 def _parse_simple_timeseries_result(db_record: asyncpg.Record) -> Optional[List[TimeSeriesPoint]]:
-    data = db_record['result_series_jsonb'] # For ROC, PercentChange
+    data = db_record.get('result_series_jsonb')
+    if isinstance(data, str):
+        try: data = json.loads(data)
+        except json.JSONDecodeError: logger.warning("Failed to parse SimpleTimeSeries JSONB"); return None
+        
     if isinstance(data, dict) and "points" in data:
         return [TimeSeriesPoint(**p) for p in data.get("points", [])]
     return None
@@ -100,12 +139,14 @@ RESPONSE_MODEL_MAP = {
 @router.get(
     "/{analysis_type_path}/{original_signal_name}", 
     summary="Get Pre-computed Time Series Analysis Result",
+    # The response_model will be dynamically chosen or be a Union if FastAPI supports it well enough here
+    # For now, let's keep the Union or allow Any and rely on correct parsing.
     response_model=Union[ZScoreResultAPI, MovingAverageResultAPI, STLDecompositionAPI, BasicStatsAPI, List[TimeSeriesPoint], Dict[str, Any]]
 )
 @async_cache_decorator(ttl_seconds=900)
 async def get_precomputed_analysis_result(
     analysis_type_path: str = Path(..., description=f"Type of analysis. Supported: {', '.join(ANALYSIS_TYPES_DB_MAP.keys())}"),
-    original_signal_name: str = Path(..., description="Name of the original signal, e.g., 'topic_5_document_count' or 'agg_signals_topic_hourly.topic_5.document_count'"),
+    original_signal_name: str = Path(..., description="Name of the original signal, e.g., 'topic_5_document_count'"),
     start_time: datetime = Query(..., description="Start of the time range for analysis_timestamp"),
     end_time: datetime = Query(..., description="End of the time range for analysis_timestamp"),
     latest_only: bool = Query(True, description="If true, fetches only the most recent analysis result within the time range.")
@@ -116,19 +157,20 @@ async def get_precomputed_analysis_result(
     if not analysis_type_db_value:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid analysis type path: {analysis_type_path}. Supported: {list(ANALYSIS_TYPES_DB_MAP.keys())}")
 
-    table_name = f"{settings.ANALYSIS_RESULTS_TABLE_PREFIX}_{analysis_type_db_value}"
+    table_name = f"\"{settings.ANALYSIS_RESULTS_TABLE_PREFIX}_{analysis_type_db_value}\"" # Ensure table name is quoted
     
     order_by_clause = "ORDER BY analysis_timestamp DESC" if latest_only else "ORDER BY analysis_timestamp ASC"
     limit_clause = "LIMIT 1" if latest_only else ""
 
+    # Quoted column names
     query = f"""
-        SELECT original_signal_name, analysis_type, parameters, 
-               result_value_numeric, result_series_jsonb, result_structured_jsonb, metadata
+        SELECT "original_signal_name", "analysis_type", "parameters", 
+               "result_value_numeric", "result_series_jsonb", "result_structured_jsonb", "metadata"
         FROM {table_name}
-        WHERE original_signal_name = $1 
-          AND analysis_type = $2 
-          AND analysis_timestamp >= $3 
-          AND analysis_timestamp <= $4
+        WHERE "original_signal_name" = $1 
+          AND "analysis_type" = $2 
+          AND "analysis_timestamp" >= $3 
+          AND "analysis_timestamp" <= $4
         {order_by_clause}
         {limit_clause}; 
     """
@@ -140,14 +182,14 @@ async def get_precomputed_analysis_result(
 
     parser_func = PARSER_MAP.get(analysis_type_db_value)
     if not parser_func:
-        logger.warning(f"No specific parser for analysis type '{analysis_type_db_value}'. Returning raw record.")
-        return dict(db_records[0]) # Return the first record as a dict if latest_only, or list of dicts
+        logger.warning(f"No specific parser for analysis type '{analysis_type_db_value}'. Returning raw record(s).")
+        return [dict(r) for r in db_records] if not latest_only else dict(db_records[0])
 
     if latest_only:
         parsed_result = parser_func(db_records[0])
         if parsed_result:
             return parsed_result
-    else: # Return list of parsed results
+    else: 
         parsed_results_list = []
         for record in db_records:
             parsed = parser_func(record)
@@ -156,4 +198,6 @@ async def get_precomputed_analysis_result(
         if parsed_results_list:
             return parsed_results_list
         
+    # Fallback if parsing fails but records were found
+    logger.error(f"Could not parse stored analysis result for '{analysis_type_path}', signal '{original_signal_name}'. Data: {db_records}")
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Could not parse stored analysis result for '{analysis_type_path}'.")
