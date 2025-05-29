@@ -1,5 +1,6 @@
 # api_gateway_service/app/routers/analysis_router.py
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi.responses import JSONResponse # ADDED for explicit response
 from typing import Any, Optional, List, Union, Dict
 from datetime import datetime
 from loguru import logger
@@ -31,6 +32,7 @@ ANALYSIS_TYPES_DB_MAP = {
     "percentchange": "percent_change"
 }
 
+# --- Parsers (using the robust versions from your previous full code) ---
 def _parse_json_field(db_record: asyncpg.Record, field_name: str, signal_name_for_log: str, parser_type_log: str) -> Optional[Any]:
     field_value = db_record.get(field_name)
     parsed_field = None
@@ -49,10 +51,8 @@ def _parse_zscore_result(db_record: asyncpg.Record) -> Optional[ZScoreResultAPI]
     signal_name_for_log = db_record.get('original_signal_name', 'UnknownSignal')
     parser_type_log = "ZScore"
     logger.debug(f"{parser_type_log} Parser: Starting for signal '{signal_name_for_log}'.")
-
     data = _parse_json_field(db_record, 'result_structured_jsonb', signal_name_for_log, parser_type_log)
     metadata = _parse_json_field(db_record, 'metadata', signal_name_for_log, parser_type_log)
-
     if not isinstance(data, dict) or "points" not in data:
         logger.warning(f"{parser_type_log} Parser: Invalid 'data' structure or missing 'points' for signal '{signal_name_for_log}'. Data: {repr(data)[:500]}")
         return None
@@ -72,11 +72,9 @@ def _parse_ma_result(db_record: asyncpg.Record) -> Optional[MovingAverageResultA
     signal_name_for_log = db_record.get('original_signal_name', 'UnknownSignal')
     parser_type_log = "MA"
     logger.debug(f"{parser_type_log} Parser: Starting for signal '{signal_name_for_log}'.")
-
     data = _parse_json_field(db_record, 'result_series_jsonb', signal_name_for_log, parser_type_log)
     params = _parse_json_field(db_record, 'parameters', signal_name_for_log, parser_type_log)
     metadata = _parse_json_field(db_record, 'metadata', signal_name_for_log, parser_type_log)
-
     if not isinstance(data, dict) or "points" not in data:
         logger.warning(f"{parser_type_log} Parser: Invalid 'data' (from result_series_jsonb) structure or missing 'points' for signal '{signal_name_for_log}'. Data: {repr(data)[:500]}")
         return None
@@ -84,31 +82,27 @@ def _parse_ma_result(db_record: asyncpg.Record) -> Optional[MovingAverageResultA
     if not isinstance(params, dict):
         logger.warning(f"{parser_type_log} Parser: Parsed 'params' is not a dictionary for signal '{signal_name_for_log}'. Type: {type(params)}. Using defaults.")
         params = {}
-
     try:
         valid_points = [MovingAveragePointAPI(**p) for p in data.get("points", []) if isinstance(p, dict)]
         if not valid_points and data.get("points"):
              logger.error(f"{parser_type_log} Parser: No valid points after filtering for signal '{signal_name_for_log}'. Original points: {data.get('points')}")
              return None
-        
         window_val = params.get("window", settings.DEFAULT_MOVING_AVERAGE_WINDOW)
         type_val = params.get("type", "simple")
         return MovingAverageResultAPI(points=valid_points, window=window_val, type=type_val, metadata=metadata)
     except Exception as e:
-        logger.error(f"{parser_type_log} Parser: Error creating MovingAverageResultAPI for '{signal_name_for_log}'. Error: {repr(e)}", exc_info=True)
-        logger.debug(f"Problematic data for MA '{signal_name_for_log}': {repr(data)}")
-        logger.debug(f"Problematic params for MA '{signal_name_for_log}': {repr(params)}")
-        logger.debug(f"Problematic metadata for MA '{signal_name_for_log}': {repr(metadata)}")
+        log_message = f"MA Parser: Error creating MovingAverageResultAPI model for signal {signal_name_for_log}: {e}. "
+        log_message += f"Data (type: {type(data)}, repr: {repr(data)[:200]}...), "
+        log_message += f"Params (type: {type(params)}, repr: {repr(params)[:100]})"
+        logger.error(log_message, exc_info=True)
         return None
 
 def _parse_stl_result(db_record: asyncpg.Record) -> Optional[STLDecompositionAPI]:
     signal_name_for_log = db_record.get('original_signal_name', 'UnknownSignal')
     parser_type_log = "STL"
     logger.debug(f"{parser_type_log} Parser: Starting for signal '{signal_name_for_log}'.")
-
     data = _parse_json_field(db_record, 'result_structured_jsonb', signal_name_for_log, parser_type_log)
     metadata = _parse_json_field(db_record, 'metadata', signal_name_for_log, parser_type_log)
-
     if not isinstance(data, dict) or not all(k in data for k in ["trend", "seasonal", "residual", "original_timestamps"]):
         logger.warning(f"{parser_type_log} Parser: Invalid 'data' structure or missing essential keys for signal '{signal_name_for_log}'. Data: {repr(data)[:500]}")
         return None
@@ -117,20 +111,12 @@ def _parse_stl_result(db_record: asyncpg.Record) -> Optional[STLDecompositionAPI
         for ts_str in data.get('original_timestamps', []):
             try: original_timestamps_parsed.append(datetime.fromisoformat(str(ts_str).replace("Z", "+00:00")))
             except: original_timestamps_parsed.append(None)
-        
-        trend_list = data.get('trend', [])
-        seasonal_list = data.get('seasonal', [])
-        residual_list = data.get('residual', [])
+        trend_list, seasonal_list, residual_list = data.get('trend', []), data.get('seasonal', []), data.get('residual', [])
         min_len = min(len(original_timestamps_parsed), len(trend_list), len(seasonal_list), len(residual_list))
-
         valid_trend = [STLComponentAPI(timestamp=original_timestamps_parsed[i], value=trend_list[i]) for i in range(min_len) if original_timestamps_parsed[i] and trend_list[i] is not None]
         valid_seasonal = [STLComponentAPI(timestamp=original_timestamps_parsed[i], value=seasonal_list[i]) for i in range(min_len) if original_timestamps_parsed[i] and seasonal_list[i] is not None]
         valid_residual = [STLComponentAPI(timestamp=original_timestamps_parsed[i], value=residual_list[i]) for i in range(min_len) if original_timestamps_parsed[i] and residual_list[i] is not None]
-        
-        return STLDecompositionAPI(
-            trend=valid_trend, seasonal=valid_seasonal, residual=valid_residual,
-            period_used=data.get("period_used"), metadata=metadata
-        )
+        return STLDecompositionAPI(trend=valid_trend, seasonal=valid_seasonal, residual=valid_residual, period_used=data.get("period_used"), metadata=metadata)
     except Exception as e:
         logger.error(f"{parser_type_log} Parser: Error creating STLDecompositionAPI for '{signal_name_for_log}'. Error: {repr(e)}", exc_info=True)
         logger.debug(f"Problematic data for STL '{signal_name_for_log}': {repr(data)}")
@@ -140,21 +126,17 @@ def _parse_basic_stats_result(db_record: asyncpg.Record) -> Optional[BasicStatsA
     signal_name_for_log = db_record.get('original_signal_name', 'UnknownSignal')
     parser_type_log = "BasicStats"
     logger.debug(f"{parser_type_log} Parser: Starting for signal '{signal_name_for_log}'.")
-
     data = _parse_json_field(db_record, 'result_structured_jsonb', signal_name_for_log, parser_type_log)
     metadata = _parse_json_field(db_record, 'metadata', signal_name_for_log, parser_type_log)
-    
     required_keys = ["count", "sum_val", "mean", "median", "min_val", "max_val", "std_dev", "variance"]
     if not isinstance(data, dict) or not all(k in data for k in required_keys):
         logger.warning(f"{parser_type_log} Parser: Invalid 'data' structure or missing keys for signal '{signal_name_for_log}'. Data: {repr(data)[:500]}")
         return None
     try:
-        # Ensure numeric fields are numeric
         for key in required_keys:
             if not isinstance(data[key], (int, float)):
                 try: data[key] = float(data[key])
-                except: 
-                    logger.error(f"{parser_type_log} Parser: Cannot convert {key} to float for '{signal_name_for_log}'. Value: {data[key]}"); return None
+                except: logger.error(f"{parser_type_log} Parser: Cannot convert {key} to float for '{signal_name_for_log}'. Value: {data[key]}"); return None
         return BasicStatsAPI(**data, metadata=metadata)
     except Exception as e:
         logger.error(f"{parser_type_log} Parser: Error creating BasicStatsAPI for '{signal_name_for_log}'. Error: {repr(e)}", exc_info=True)
@@ -165,9 +147,7 @@ def _parse_simple_timeseries_result(db_record: asyncpg.Record, analysis_name_log
     signal_name_for_log = db_record.get('original_signal_name', 'UnknownSignal')
     parser_type_log = analysis_name_log_prefix
     logger.debug(f"{parser_type_log} Parser: Starting for signal '{signal_name_for_log}'.")
-
     data = _parse_json_field(db_record, 'result_series_jsonb', signal_name_for_log, parser_type_log)
-
     if not isinstance(data, dict) or "points" not in data:
         logger.warning(f"{parser_type_log} Parser: Invalid 'data' structure or missing 'points' for signal '{signal_name_for_log}'. Data: {repr(data)[:500]}")
         return None
@@ -182,7 +162,6 @@ def _parse_simple_timeseries_result(db_record: asyncpg.Record, analysis_name_log
         logger.debug(f"Problematic data for {parser_type_log} '{signal_name_for_log}': {repr(data)}")
         return None
 
-
 PARSER_MAP = {
     "z_score": _parse_zscore_result,
     "moving_average": _parse_ma_result,
@@ -192,14 +171,9 @@ PARSER_MAP = {
     "percent_change": lambda rec: _parse_simple_timeseries_result(rec, "PctChange")
 }
 
-RESPONSE_MODEL_MAP = {
-    "z_score": ZScoreResultAPI,
-    "moving_average": MovingAverageResultAPI,
-    "stl_decomposition": STLDecompositionAPI,
-    "basic_stats": BasicStatsAPI,
-    "rate_of_change": List[TimeSeriesPoint],
-    "percent_change": List[TimeSeriesPoint]
-}
+# RESPONSE_MODEL_MAP is not strictly needed by the endpoint if Union works,
+# but can be useful for other logic if you had it.
+# RESPONSE_MODEL_MAP = { ... }
 
 @router.get(
     "/{analysis_type_path}/{original_signal_name}",
@@ -255,17 +229,25 @@ async def get_precomputed_analysis_result(
     if latest_only:
         logger.debug(f"AnalysisRouter: Parsing latest record for {analysis_type_path} on '{original_signal_name}'.")
         parsed_result = parser_func(db_records[0])
-        if parsed_result:
-            return parsed_result
-    else:
+        if parsed_result is None: # Parser indicated an issue
+             logger.error(f"AnalysisRouter: Parser returned None for latest record of {analysis_type_path} on '{original_signal_name}'.")
+             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error parsing stored analysis result for '{analysis_type_path}'.")
+        return parsed_result # Return the Pydantic model or List[TimeSeriesPoint]
+    else: # latest_only is False
         parsed_results_list = []
         for i, record in enumerate(db_records):
             logger.debug(f"AnalysisRouter: Parsing record {i} for {analysis_type_path} on '{original_signal_name}'.")
             parsed = parser_func(record)
-            if parsed:
+            if parsed is not None: # Only append if parsing was successful
                 parsed_results_list.append(parsed)
-        if parsed_results_list:
-            return parsed_results_list
-
-    logger.error(f"AnalysisRouter: Could not parse ANY stored analysis result for '{analysis_type_path}', signal '{original_signal_name}'. Last raw record (if any): {dict(db_records[-1]) if db_records else 'None'}")
-    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error parsing stored analysis result for '{analysis_type_path}'. Please check server logs for parsing details.")
+            else: # Log if a specific record in the list fails to parse
+                logger.warning(f"AnalysisRouter: Failed to parse record index {i} for {analysis_type_path} on '{original_signal_name}'. Skipping this record.")
+        
+        if parsed_results_list: # If at least one record was parsed successfully
+            # If the parser returns List[TimeSeriesPoint], the list itself is the response
+            # If it returns a Pydantic model, we have a list of Pydantic models
+            # FastAPI should handle List[PydanticModel] or List[List[TimeSeriesPoint]] (if RoC/PctChange returned list of lists)
+            return parsed_results_list 
+        else: # No records parsed successfully
+            logger.error(f"AnalysisRouter: Could not parse ANY stored analysis results for '{analysis_type_path}', signal '{original_signal_name}' when latest_only=false.")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error parsing all stored analysis results for '{analysis_type_path}'. Please check server logs.")
