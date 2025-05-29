@@ -1,3 +1,4 @@
+# api_gateway_service/app/models.py
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Optional, Any
 from datetime import datetime
@@ -6,6 +7,11 @@ class TimeSeriesPoint(BaseModel):
     timestamp: datetime
     value: float
 
+class TimeSeriesData(BaseModel):
+    signal_name: str
+    points: List[TimeSeriesPoint]
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
 class TopicTrend(BaseModel):
     topic_id: Any
     topic_name: str
@@ -13,7 +19,7 @@ class TopicTrend(BaseModel):
 
 class SentimentDistribution(BaseModel):
     label: str
-    count: int 
+    count: int
 
 class TopicSentiment(BaseModel):
     topic_id: Any
@@ -93,7 +99,7 @@ class BasicStatsAPI(BaseModel):
     std_dev: float
     variance: float
     metadata: Optional[Dict[str, Any]] = None
-    
+
 class TimeSeriesRequestParams(BaseModel):
     start_time: datetime
     end_time: datetime
