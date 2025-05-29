@@ -1,9 +1,12 @@
+# api_gateway_service/app/main.py
+
 from fastapi import FastAPI, Request, Depends, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response # MODIFIED: Added Response
 from loguru import logger
 import sys
 import time
 from contextlib import asynccontextmanager
+import os # MODIFIED: Added os for path joining (optional, if serving a real favicon)
 
 from app.config import settings
 from app.db_connector import connect_db, close_db, get_pool
@@ -44,7 +47,7 @@ app = FastAPI(
     description="API Gateway for the Minbar Public Health Monitoring Platform.",
     version="1.0.0",
     lifespan=lifespan,
-    dependencies=[Depends(rate_limit_dependency)] 
+    dependencies=[Depends(rate_limit_dependency)]
 )
 
 @app.middleware("http")
@@ -54,6 +57,24 @@ async def add_process_time_header(request: Request, call_next):
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(process_time)
     return response
+
+# --- START OF FAVICON.ICO FIX ---
+@app.get('/favicon.ico', include_in_schema=False)
+async def favicon():
+    # Option 1: Return a 204 No Content (simplest way to stop errors)
+    return Response(status_code=204)
+
+    # Option 2: Serve an actual favicon.ico file if you have one
+    # Make sure you have a 'static' folder in your 'app' directory
+    # and a 'favicon.ico' file inside it.
+    # from fastapi.responses import FileResponse
+    # favicon_path = os.path.join(os.path.dirname(__file__), "static", "favicon.ico")
+    # if os.path.exists(favicon_path):
+    #     return FileResponse(favicon_path, media_type="image/vnd.microsoft.icon")
+    # else:
+    #     # Fallback if file doesn't exist, to prevent 500 error from FileResponse
+    #     return Response(status_code=404)
+# --- END OF FAVICON.ICO FIX ---
 
 app.include_router(signals_router.router)
 app.include_router(keywords_router.router)
@@ -75,7 +96,7 @@ async def health_check():
     except Exception as e:
         logger.warning(f"Health check DB connection error: {e}")
         db_status = f"error: {type(e).__name__}"
-    
+
     service_status = "ok" if db_ok else "error"
     http_status = 200 if db_ok else 503
 
@@ -88,9 +109,9 @@ if __name__ == "__main__":
     import uvicorn
     logger.info(f"Starting {settings.SERVICE_NAME} locally on host 0.0.0.0 port {settings.SERVICE_PORT}")
     uvicorn.run(
-        "app.main:app", 
-        host="0.0.0.0", 
-        port=settings.SERVICE_PORT, 
-        log_level=settings.LOG_LEVEL.lower(), 
-        reload=True 
+        "app.main:app",
+        host="0.0.0.0",
+        port=settings.SERVICE_PORT,
+        log_level=settings.LOG_LEVEL.lower(),
+        reload=True
     )
