@@ -1,302 +1,83 @@
-#!/bin/bash
+### API GATEWAY DOCUMENTATION AND EXAMPLE ENDPOINTS AND RESPONSES:
 
-# ==============================================================================
-# Minbar Keyword Manager (Assumed running on localhost:8000 within its VM)
-# ==============================================================================
-echo "--- Testing Minbar Keyword Manager (Port 8000) ---"
+ENDPOINT: GET / 
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/"
+{"message":"Welcome to Minbar API Gateway, admin! All systems operational."}
 
-# GET /
-echo "GET /"
-curl -X GET "http://localhost:8000/"
-echo ""
-echo ""
+ENDPOINT: GET /health
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/health"
+{"status":"ok","service_name":"Minbar API Gateway","dependencies":{"database":"connected","keyword_manager":"connected"}}
 
-# GET /health
-echo "GET /health"
-curl -X GET "http://localhost:8000/health"
-echo ""
-echo ""
+Endpoint: GET /signals/overview
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/signals/overview?days_past=30"
+{"total_documents_processed":4443,"active_topics_count":67,"last_data_ingested_at":"2025-05-29T16:00:00Z"}
 
-# POST /api/v1/concepts (Minimal)
-echo "POST /api/v1/concepts (Minimal)"
-curl -X POST "http://localhost:8000/api/v1/concepts" \
--H "Content-Type: application/json" \
--d '{
-  "english_term": "fever"
-}'
-echo ""
-echo ""
+Endpoint: GET /signals/topics/list
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/signals/topics/list?limit=3&min_doc_count=5&days_past=30"
+[{"topic_id":"402","topic_name":"Hospitals Overwhelmed: Long Wait Times & Bed Shortages","total_documents_in_period":264,"last_seen":"2025-05-23T16:00:00Z"},{"topic_id":"777","topic_name":"Unverified Rumors: New Virus Strain Emergence","total_documents_in_period":260,"last_seen":"2025-05-27T14:00:00Z"},{"topic_id":"1001","topic_name":"Funding for Mental Health Services Debate","total_documents_in_period":239,"last_seen":"2025-05-20T21:00:00Z"}]
 
-# POST /api/v1/concepts (With optional fields)
-echo "POST /api/v1/concepts (With optional fields)"
-curl -X POST "http://localhost:8000/api/v1/concepts" \
--H "Content-Type: application/json" \
--d '{
-  "english_term": "seasonal flu",
-  "categories": ["infectious_disease"],
-  "french_term": "grippe saisonnière",
-  "arabic_term": "الانفلونزا الموسمية"
-}'
-echo ""
-echo ""
+Endpoint: GET /signals/topics/{topic_id}/trend
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/signals/topics/3/trend?time_aggregation=hourly&start_time=2025-05-20T00:00:00Z&end_time=2025-05-20T23:59:59Z"
+{"topic_id":"3","topic_name":"3_vaccine_hesitancy_side_effects_rumors","trend_data":[{"timestamp":"2025-05-20T10:00:00Z","value":15.0},{"timestamp":"2025-05-20T11:00:00Z","value":18.0},{"timestamp":"2025-05-20T12:00:00Z","value":12.0},{"timestamp":"2025-05-20T13:00:00Z","value":20.0},{"timestamp":"2025-05-20T14:00:00Z","value":22.0},{"timestamp":"2025-05-20T15:00:00Z","value":17.0},{"timestamp":"2025-05-20T16:00:00Z","value":19.0}]}
 
-# GET /api/v1/concepts (Paginated)
-echo "GET /api/v1/concepts (Paginated)"
-curl -X GET "http://localhost:8000/api/v1/concepts?skip=0&limit=2"
-echo ""
-echo ""
+Endpoint: GET /signals/topics/{topic_id}/sentiment_distribution
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/signals/topics/3/sentiment_distribution?time_aggregation=hourly&start_time=2025-05-20T00:00:00Z&end_time=2025-05-20T23:59:59Z"
+{"topic_id":"3","topic_name":"3_vaccine_hesitancy_side_effects_rumors","sentiments":[{"label":"Concerned","count":123}]}
 
-# GET /api/v1/concepts (Default pagination)
-echo "GET /api/v1/concepts (Default pagination)"
-curl -X GET "http://localhost:8000/api/v1/concepts"
-echo ""
-echo ""
+Endpoint: GET /signals/topics/{topic_id}/top_keywords
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/signals/topics/3/top_keywords?time_aggregation=hourly&start_time=2025-05-20T00:00:00Z&end_time=2025-05-20T23:59:59Z&limit=3"
+{"topic_id":"3","topic_name":"3_vaccine_hesitancy_side_effects_rumors","keywords":[{"keyword":"trust science","frequency":20,"relevance_score":null,"concept_id":null},{"keyword":"conspiracy","frequency":18,"relevance_score":null,"concept_id":null}]}
 
-# GET /api/v1/concepts/{concept_id}
-# **NOTE: Replace 66243f8a1d5b8e9f7a0c1d2e with an ACTUAL concept_id from your DB if testing this.**
-echo "GET /api/v1/concepts/{concept_id} (replace ID with a valid one)"
-curl -X GET "http://localhost:8000/api/v1/concepts/66243f8a1d5b8e9f7a0c1d2e"
-echo ""
-echo ""
+Endpoint: GET /signals/sentiments/overall_trend
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/signals/sentiments/overall_trend?time_aggregation=hourly&start_time=2025-05-20T00:00:00Z&end_time=2025-05-23T23:59:59Z&sentiment_labels=Concerned,Anxious"
+[{"sentiment_label":"Concerned","trend_data":[{"timestamp":"2025-05-20T09:00:00Z","value":0.15},{"timestamp":"2025-05-20T10:00:00Z","value":0.27},{"timestamp":"2025-05-20T11:00:00Z","value":0.40666666666666657},{"timestamp":"2025-05-20T12:00:00Z","value":0.38000000000000006},{"timestamp":"2025-05-20T13:00:00Z","value":0.3625},{"timestamp":"2025-05-20T14:00:00Z","value":0.43},{"timestamp":"2025-05-20T15:00:00Z","value":0.388},{"timestamp":"2025-05-20T16:00:00Z","value":0.4766666666666666},{"timestamp":"2025-05-20T17:00:00Z","value":0.3},{"timestamp":"2025-05-20T18:00:00Z","value":0.435},{"timestamp":"2025-05-20T19:00:00Z","value":0.31},{"timestamp":"2025-05-20T20:00:00Z","value":0.26},{"timestamp":"2025-05-20T21:00:00Z","value":0.29},{"timestamp":"2025-05-21T09:00:00Z","value":0.18},{"timestamp":"2025-05-21T10:00:00Z","value":0.19},{"timestamp":"2025-05-21T11:00:00Z","value":0.155},{"timestamp":"2025-05-21T12:00:00Z","value":0.25333333333333335},{"timestamp":"2025-05-21T13:00:00Z","value":0.22999999999999998},{"timestamp":"2025-05-21T14:00:00Z","value":0.26},{"timestamp":"2025-05-21T15:00:00Z","value":0.24666666666666667},{"timestamp":"2025-05-21T16:00:00Z","value":0.36},{"timestamp":"2025-05-21T17:00:00Z","value":0.46},{"timestamp":"2025-05-21T18:00:00Z","value":0.51},{"timestamp":"2025-05-22T09:00:00Z","value":0.3},{"timestamp":"2025-05-22T10:00:00Z","value":0.35333333333333333},{"timestamp":"2025-05-22T11:00:00Z","value":0.30000000000000004},{"timestamp":"2025-05-22T12:00:00Z","value":0.27},{"timestamp":"2025-05-22T13:00:00Z","value":0.26},{"timestamp":"2025-05-22T14:00:00Z","value":0.28},{"timestamp":"2025-05-22T15:00:00Z","value":0.31},{"timestamp":"2025-05-22T16:00:00Z","value":0.30500000000000005},{"timestamp":"2025-05-23T09:00:00Z","value":0.4},{"timestamp":"2025-05-23T10:00:00Z","value":0.36},{"timestamp":"2025-05-23T11:00:00Z","value":0.3766666666666667},{"timestamp":"2025-05-23T12:00:00Z","value":0.325},{"timestamp":"2025-05-23T13:00:00Z","value":0.385},{"timestamp":"2025-05-23T14:00:00Z","value":0.345},{"timestamp":"2025-05-23T15:00:00Z","value":0.375},{"timestamp":"2025-05-23T16:00:00Z","value":0.18},{"timestamp":"2025-05-23T17:00:00Z","value":0.32}]},{"sentiment_label":"Anxious","trend_data":[{"timestamp":"2025-05-20T09:00:00Z","value":0.01},{"timestamp":"2025-05-20T10:00:00Z","value":0.08666666666666667},{"timestamp":"2025-05-20T11:00:00Z","value":0.12666666666666668},{"timestamp":"2025-05-20T12:00:00Z","value":0.14666666666666667},{"timestamp":"2025-05-20T13:00:00Z","value":0.19},{"timestamp":"2025-05-20T14:00:00Z","value":0.16},{"timestamp":"2025-05-20T15:00:00Z","value":0.146},{"timestamp":"2025-05-20T16:00:00Z","value":0.20666666666666667},{"timestamp":"2025-05-20T17:00:00Z","value":0.1466666666666667},{"timestamp":"2025-05-20T18:00:00Z","value":0.185},{"timestamp":"2025-05-20T19:00:00Z","value":0.17},{"timestamp":"2025-05-20T20:00:00Z","value":0.14},{"timestamp":"2025-05-20T21:00:00Z","value":0.16},{"timestamp":"2025-05-21T09:00:00Z","value":0.08},{"timestamp":"2025-05-21T10:00:00Z","value":0.085},{"timestamp":"2025-05-21T11:00:00Z","value":0.07500000000000001},{"timestamp":"2025-05-21T12:00:00Z","value":0.10333333333333333},{"timestamp":"2025-05-21T13:00:00Z","value":0.08000000000000002},{"timestamp":"2025-05-21T14:00:00Z","value":0.10333333333333333},{"timestamp":"2025-05-21T15:00:00Z","value":0.11},{"timestamp":"2025-05-21T16:00:00Z","value":0.33},{"timestamp":"2025-05-21T17:00:00Z","value":0.15},{"timestamp":"2025-05-21T18:00:00Z","value":0.13},{"timestamp":"2025-05-22T09:00:00Z","value":0.15},{"timestamp":"2025-05-22T10:00:00Z","value":0.13999999999999999},{"timestamp":"2025-05-22T11:00:00Z","value":0.115},{"timestamp":"2025-05-22T12:00:00Z","value":0.115},{"timestamp":"2025-05-22T13:00:00Z","value":0.095},{"timestamp":"2025-05-22T14:00:00Z","value":0.095},{"timestamp":"2025-05-22T15:00:00Z","value":0.095},{"timestamp":"2025-05-22T16:00:00Z","value":0.055},{"timestamp":"2025-05-23T09:00:00Z","value":0.285},{"timestamp":"2025-05-23T10:00:00Z","value":0.21},{"timestamp":"2025-05-23T11:00:00Z","value":0.18000000000000002},{"timestamp":"2025-05-23T12:00:00Z","value":0.215},{"timestamp":"2025-05-23T13:00:00Z","value":0.22999999999999998},{"timestamp":"2025-05-23T14:00:00Z","value":0.21000000000000002},{"timestamp":"2025-05-23T15:00:00Z","value":0.215},{"timestamp":"2025-05-23T16:00:00Z","value":0.33},{"timestamp":"2025-05-23T17:00:00Z","value":0.1}]}]
 
-# POST /api/v1/feedback (Minimal)
-# **NOTE: Replace 66243f8a1d5b8e9f7a0c1d2e with an ACTUAL concept_id from your DB.**
-echo "POST /api/v1/feedback (Minimal - replace ID with a valid one)"
-curl -X POST "http://localhost:8000/api/v1/feedback" \
--H "Content-Type: application/json" \
--d '{
-  "concept_id": "66243f8a1d5b8e9f7a0c1d2e",
-  "language": "en",
-  "relevance_metric": 0.8,
-  "source": "test_ingester_script"
-}'
-echo ""
-echo ""
+Endpoint: GET /signals/rankings/top_topics
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/signals/rankings/top_topics?time_aggregation=hourly&start_time=2025-05-20T00:00:00Z&end_time=2025-05-23T23:59:59Z&rank_by=high_concern_score&limit=2"
+[{"name":"3_vaccine_hesitancy_side_effects_rumors","id":"3","score":0.5642857142857143,"details":null},{"name":"Air Quality Respiratory Issues Alert","id":"604","score":0.5471428571428572,"details":null}]
 
-# POST /api/v1/feedback (With optional term)
-# **NOTE: Replace 66243f8a1d5b8e9f7a0c1d2e with an ACTUAL concept_id from your DB.**
-echo "POST /api/v1/feedback (With optional term - replace ID with a valid one)"
-curl -X POST "http://localhost:8000/api/v1/feedback" \
--H "Content-Type: application/json" \
--d '{
-  "concept_id": "66243f8a1d5b8e9f7a0c1d2e",
-  "language": "en",
-  "relevance_metric": 0.85,
-  "source": "test_ingester_script",
-  "term": "high temperature"
-}'
-echo ""
-echo ""
+Endpoint: GET /keywords/top_managed
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/keywords/top_managed?lang=en&limit=2"
+[{"term":"chlamydia","language":"en","concept_id":"6838218bc8c315590518155b","concept_display_name":"chlamydia"},{"term":"chlamydia symptoms","language":"en","concept_id":"6838218fc8c315590518155c","concept_display_name":"chlamydia symptoms"}]
 
-# POST /api/v1/concepts/generate (Specific category)
-echo "POST /api/v1/concepts/generate (Specific category)"
-curl -X POST "http://localhost:8000/api/v1/concepts/generate?category=mental_health"
-echo ""
-echo ""
+Endpoint: GET /analysis/basicstats/{original_signal_name}
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/analysis/basicstats/topic_3_document_count?start_time=2025-05-20T16:00:00Z&end_time=2025-05-20T18:00:00Z&latest_only=true"
+{"count":7,"sum_val":123.0,"mean":17.5714,"median":18.0,"min_val":12.0,"max_val":22.0,"std_dev":3.2941,"variance":10.8516,"metadata":{"description":"Seeded Basic Stats for Vaccine Hesitancy topic 3 document count","source_table":"agg_signals_topic_hourly","analysis_source":"seed_data_script","metric_analyzed":"document_count","time_range_analyzed":"2025-05-20T10:00:00Z to 2025-05-20T16:00:00Z","topic_id_of_original_signal":"3"}}
 
-# POST /api/v1/concepts/generate (Random category)
-echo "POST /api/v1/concepts/generate (Random category)"
-curl -X POST "http://localhost:8000/api/v1/concepts/generate"
-echo ""
-echo ""
+Endpoint: GET /analysis/movingaverage/{original_signal_name}
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/analysis/movingaverage/topic_3_document_count?start_time=2025-05-20T16:00:00Z&end_time=2025-05-20T18:00:00Z&latest_only=true"
+{"points":[{"timestamp":"2025-05-20T12:00:00Z","value":15.0},{"timestamp":"2025-05-20T13:00:00Z","value":16.6667},{"timestamp":"2025-05-20T14:00:00Z","value":18.0},{"timestamp":"2025-05-20T15:00:00Z","value":19.6667},{"timestamp":"2025-05-20T16:00:00Z","value":19.3333}],"window":3,"type":"simple","metadata":{"description":"Seeded MA(3) for Vaccine Hesitancy topic 3 document count","source_table":"agg_signals_topic_hourly","analysis_source":"seed_data_script","metric_analyzed":"document_count","time_range_analyzed":"2025-05-20T10:00:00Z to 2025-05-20T16:00:00Z","topic_id_of_original_signal":"3"}}
 
-# GET /api/v1/keywords (Example)
-echo "GET /api/v1/keywords (Example)"
-curl -X GET "http://localhost:8000/api/v1/keywords?lang=fr&limit=5&min_score=0.3"
-echo ""
-echo ""
+Endpoint: GET /analysis/rateofchange/{original_signal_name}
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/analysis/rateofchange/topic_3_document_count?start_time=2025-05-20T16:00:00Z&end_time=2025-05-20T18:00:00Z&latest_only=true"
+[{"timestamp":"2025-05-20T11:00:00Z","value":3.0},{"timestamp":"2025-05-20T12:00:00Z","value":-6.0},{"timestamp":"2025-05-20T13:00:00Z","value":8.0},{"timestamp":"2025-05-20T14:00:00Z","value":2.0},{"timestamp":"2025-05-20T15:00:00Z","value":-5.0},{"timestamp":"2025-05-20T16:00:00Z","value":2.0}]
 
-# GET /api/v1/keywords (Minimal)
-echo "GET /api/v1/keywords (Minimal)"
-curl -X GET "http://localhost:8000/api/v1/keywords?lang=en"
-echo ""
-echo ""
+Endpoint: GET /analysis/percentchange/{original_signal_name}
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/analysis/percentchange/topic_3_document_count?start_time=2025-05-20T16:00:00Z&end_time=2025-05-20T18:00:00Z&latest_only=true"
+[{"timestamp":"2025-05-20T11:00:00Z","value":20.0},{"timestamp":"2025-05-20T12:00:00Z","value":-33.3333},{"timestamp":"2025-05-20T13:00:00Z","value":66.6667},{"timestamp":"2025-05-20T14:00:00Z","value":10.0},{"timestamp":"2025-05-20T15:00:00Z","value":-22.7273},{"timestamp":"2025-05-20T16:00:00Z","value":11.7647}]
 
+Endpoint: GET /analysis/zscore/{original_signal_name}
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/analysis/zscore/topic_3_document_count?start_time=2025-05-20T16:00:00Z&end_time=2025-05-20T18:00:00Z&latest_only=true"
+{"points":[{"timestamp":"2025-05-20T10:00:00Z","original_value":15.0,"z_score":-0.7803},{"timestamp":"2025-05-20T11:00:00Z","original_value":18.0,"z_score":0.13},{"timestamp":"2025-05-20T12:00:00Z","original_value":12.0,"z_score":-1.6907},{"timestamp":"2025-05-20T13:00:00Z","original_value":20.0,"z_score":0.7369},{"timestamp":"2025-05-20T14:00:00Z","original_value":22.0,"z_score":1.3437},{"timestamp":"2025-05-20T15:00:00Z","original_value":17.0,"z_score":-0.1734},{"timestamp":"2025-05-20T16:00:00Z","original_value":19.0,"z_score":0.4334}],"window":null,"metadata":{"description":"Seeded Z-score (whole series) for Vaccine Hesitancy topic 3 document count","source_table":"agg_signals_topic_hourly","analysis_source":"seed_data_script","metric_analyzed":"document_count","time_range_analyzed":"2025-05-20T10:00:00Z to 2025-05-20T16:00:00Z","topic_id_of_original_signal":"3"}}
 
-# ==============================================================================
-# Minbar - Social Media Ingester (Assumed running on localhost:8001 within its VM)
-# ==============================================================================
-echo "--- Testing Minbar - Social Media Ingester (Port 8001) ---"
+Endpoint: GET /analysis/stldecomposition/{original_signal_name}
+EXAMPLE:
+curl -u admin:changeme "http://34.155.97.220:8080/analysis/stldecomposition/topic_3_document_count?start_time=2025-05-20T16:00:00Z&end_time=2025-05-20T18:00:00Z&latest_only=true"
+{"trend":[{"timestamp":"2025-05-20T10:00:00Z","value":15.5},{"timestamp":"2025-05-20T11:00:00Z","value":16.0},{"timestamp":"2025-05-20T12:00:00Z","value":16.5},{"timestamp":"2025-05-20T13:00:00Z","value":17.0},{"timestamp":"2025-05-20T14:00:00Z","value":17.5},{"timestamp":"2025-05-20T15:00:00Z","value":18.0},{"timestamp":"2025-05-20T16:00:00Z","value":18.5}],"seasonal":[{"timestamp":"2025-05-20T10:00:00Z","value":-0.2},{"timestamp":"2025-05-20T11:00:00Z","value":0.3},{"timestamp":"2025-05-20T12:00:00Z","value":-0.1},{"timestamp":"2025-05-20T13:00:00Z","value":0.2},{"timestamp":"2025-05-20T14:00:00Z","value":-0.3},{"timestamp":"2025-05-20T15:00:00Z","value":0.1},{"timestamp":"2025-05-20T16:00:00Z","value":-0.2}],"residual":[{"timestamp":"2025-05-20T10:00:00Z","value":-0.3},{"timestamp":"2025-05-20T11:00:00Z","value":1.7},{"timestamp":"2025-05-20T12:00:00Z","value":-4.4},{"timestamp":"2025-05-20T13:00:00Z","value":2.8},{"timestamp":"2025-05-20T14:00:00Z","value":4.8},{"timestamp":"2025-05-20T15:00:00Z","value":-1.1},{"timestamp":"2025-05-20T16:00:00Z","value":0.7}],"period_used":3,"metadata":{"description":"Seeded STL (p3) for Vaccine Hesitancy topic 3 document count (illustrative due to short series)","source_table":"agg_signals_topic_hourly","analysis_source":"seed_data_script","metric_analyzed":"document_count","time_range_analyzed":"2025-05-20T10:00:00Z to 2025-05-20T16:00:00Z","topic_id_of_original_signal":"3"}}
 
-# GET /
-echo "GET /"
-curl -X GET "http://localhost:8001/"
-echo ""
-echo ""
-
-# GET /health
-echo "GET /health"
-curl -X GET "http://localhost:8001/health"
-echo ""
-echo ""
-
-# POST /trigger-ingestion
-echo "POST /trigger-ingestion"
-curl -X POST "http://localhost:8001/trigger-ingestion"
-echo ""
-echo ""
-
-
-# ==============================================================================
-# Minbar Data Preprocessor (Assumed running on localhost:8002 within its VM)
-# ==============================================================================
-echo "--- Testing Minbar Data Preprocessor (Port 8002) ---"
-
-# GET /
-echo "GET /"
-curl -X GET "http://localhost:8002/"
-echo ""
-echo ""
-
-# GET /health
-echo "GET /health"
-curl -X GET "http://localhost:8002/health"
-echo ""
-echo ""
-
-# POST /trigger-processing
-echo "POST /trigger-processing"
-curl -X POST "http://localhost:8002/trigger-processing"
-echo ""
-echo ""
-
-
-# ==============================================================================
-# Minbar NLP Analyzer Service (Assumed running on localhost:8001 within its VM)
-# ==============================================================================
-echo "--- Testing Minbar NLP Analyzer Service (Port 8001) ---"
-
-# POST /analyze
-# **NOTE: Replace raw_mongo_id, keyword_concept_id with relevant values if needed for specific testing.**
-echo "POST /analyze"
-curl -X POST "http://localhost:8001/analyze" \
--H "Content-Type: application/json" \
--d '{
-  "raw_mongo_id": "sampleMongoId123",
-  "source": "test_post",
-  "original_timestamp": "2024-05-01T12:00:00Z",
-  "retrieved_by_keyword": "health concerns",
-  "keyword_language": "en",
-  "keyword_concept_id": "sampleConceptId456",
-  "detected_language": "en",
-  "cleaned_text": "I am feeling very anxious about the new hospital policies and the rising cost of medication.",
-  "tokens_processed": ["feeling", "anxious", "new", "hospital", "policies", "rising", "cost", "medication"],
-  "lemmas": ["feel", "anxious", "new", "hospital", "policy", "rise", "cost", "medication"],
-  "original_url": "http://example.com/post/1"
-}'
-echo ""
-echo ""
-
-
-# ==============================================================================
-# Minbar Signal Extraction Service (Assumed running on localhost:8002 within its VM)
-# ==============================================================================
-echo "--- Testing Minbar Signal Extraction Service (Port 8002) ---"
-
-# POST /extract-signal
-# **NOTE: This endpoint is primarily for testing aggregation logic.**
-# **Replace document details and IDs with relevant test data.**
-echo "POST /extract-signal"
-curl -X POST "http://localhost:8002/extract-signal" \
--H "Content-Type: application/json" \
--d '{
-  "topic_id": "topic_health_access_001",
-  "topic_name": "001_access_healthcare_costs",
-  "documents": [
-    {
-      "raw_mongo_id": "mongoDocSignal1",
-      "original_timestamp": "2024-05-01T14:00:00Z",
-      "overall_sentiment": [
-        {"label": "Concerned", "score": 0.9},
-        {"label": "Anxious", "score": 0.7}
-      ],
-      "extracted_keywords_frequency": [
-        {"keyword": "access", "frequency": 5},
-        {"keyword": "cost", "frequency": 4}
-      ]
-    },
-    {
-      "raw_mongo_id": "mongoDocSignal2",
-      "original_timestamp": "2024-05-01T14:30:00Z",
-      "overall_sentiment": [
-        {"label": "Concerned", "score": 0.8}
-      ],
-      "extracted_keywords_frequency": [
-        {"keyword": "insurance", "frequency": 3},
-        {"keyword": "cost", "frequency": 2}
-      ]
-    }
-  ],
-  "timeframe_start": "2024-05-01T14:00:00Z",
-  "timeframe_end": "2024-05-01T15:00:00Z"
-}'
-echo ""
-echo ""
-
-
-# ==============================================================================
-# Minbar Time Series Analysis Service (Assumed running on localhost:8003 within its VM)
-# ==============================================================================
-echo "--- Testing Minbar Time Series Analysis Service (Port 8003) ---"
-
-# POST /analyze (Providing data directly for basic_stats)
-echo "POST /analyze (Providing data directly for basic_stats)"
-curl -X POST "http://localhost:8003/analyze" \
--H "Content-Type: application/json" \
--d '{
-  "time_series_data": {
-    "signal_name": "manual_test_signal_temp",
-    "points": [
-      {"timestamp": "2024-05-01T00:00:00Z", "value": 20.0},
-      {"timestamp": "2024-05-01T01:00:00Z", "value": 22.5},
-      {"timestamp": "2024-05-01T02:00:00Z", "value": 21.0},
-      {"timestamp": "2024-05-01T03:00:00Z", "value": 23.0},
-      {"timestamp": "2024-05-01T04:00:00Z", "value": 20.5}
-    ],
-    "metadata": {"unit": "celsius"}
-  },
-  "analysis_type": "basic_stats",
-  "parameters": {}
-}'
-echo ""
-echo ""
-
-# POST /analyze (Fetching data for moving_average)
-# **NOTE: This requires data to exist in your TimescaleDB for 'topic_123_document_count'.**
-# **Adjust signal_name, start_time, end_time to match your data.**
-echo "POST /analyze (Fetching data for moving_average - requires data in DB)"
-curl -X POST "http://localhost:8003/analyze" \
--H "Content-Type: application/json" \
--d '{
-  "signal_name": "topic_123_document_count",
-  "start_time": "2024-04-01T00:00:00Z",
-  "end_time": "2024-05-02T00:00:00Z",
-  "analysis_type": "moving_average",
-  "parameters": {
-    "window": 3,
-    "type": "simple"
-  }
-}'
-echo ""
-echo ""
-
-# POST /analyze (Fetching data for z_score with specific metric column)
-# **NOTE: This requires data to exist in your TimescaleDB for topic 'exampleTopic' and metric 'avg_sentiment_concerned'.**
-# **Adjust signal_name, start_time, end_time, and parameters.metric_column_to_analyze to match your data.**
-echo "POST /analyze (Fetching data for z_score with specific metric - requires data in DB)"
-curl -X POST "http://localhost:8003/analyze" \
--H "Content-Type: application/json" \
--d '{
-  "signal_name": "topic_exampleTopic", 
-  "start_time": "2024-04-10T00:00:00Z",
-  "end_time": "2024-04-20T00:00:00Z",
-  "analysis_type": "z_score",
-  "parameters": {
-    "metric_column_to_analyze": "dominant_sentiment_score", 
-    "window": 5 
-  }
-}'
-echo ""
-echo ""
-
-echo "--- All Tests Attempted ---"
+###
